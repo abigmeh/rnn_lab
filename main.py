@@ -6,7 +6,7 @@ from keras.models import Sequential
 from keras.layers import GRU,LSTM, SimpleRNN, Dense, Dropout
 from keras.optimizers import SGD, RMSprop, Adam, Nadam
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
-# import missingno as msno
+import missingno as msno
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.metrics import mean_squared_error, r2_score
 import math
@@ -35,44 +35,44 @@ data['date'] = pd.to_datetime(data['date'])
 data = data.sort_values(by =['date'])
 
 '''plot the figures and check the missing values'''
-# msno.matrix(data)
-# plt.savefig('Particle.png')
-# msno.bar(data)
-# plt.savefig('Partical_bar.png')
-# plt.close()
+msno.matrix(data)
+plt.savefig('Particle.png')
+msno.bar(data)
+plt.savefig('Partical_bar.png')
+plt.close()
 
 '''among the particles choose three most importante elements with less missing valules'''
 ''' plot an example'''
-# def plot_example(station_id):
-#     with pd.HDFStore('madrid.h5') as data:
-#         example = data[station_id]
-#         station_id = [k[1:] for k in data.keys() if k != '/master']
-#         col_name = []
-#         count_col = []
-#         data_list = []
-#         for i in station_id:
-#             i = i.lstrip('/')
-#             df = data[i]
-#             df_copy = df.copy()
-#             df_copy['station'] = i
-#             data_list.append(df_copy)
-#             df = df.sort_index()
-#             col_name.append(df.columns)
-#             msno.matrix(df)
-#             plt.savefig('station_matrix/' + i + '.png')
-#             plt.close()
-#
-#     fig, ax = plt.subplots(figsize=(20, 5))
-#     examp_particles = example[['NO_2','O_3', 'PM10']]
-#
-#     examp_particles /= examp_particles.max(axis=0)
-#
-#     examp_particles.interpolate(method='time').rolling(window=24*15).mean().plot(ax=ax)
-#     plt.savefig('example.png')
-#     plt.show()
-#     plt.close()
-#
-# plot_example('28079018')
+def plot_example(station_id):
+    with pd.HDFStore('madrid.h5') as data:
+        example = data[station_id]
+        station_id = [k[1:] for k in data.keys() if k != '/master']
+        col_name = []
+        count_col = []
+        data_list = []
+        for i in station_id:
+            i = i.lstrip('/')
+            df = data[i]
+            df_copy = df.copy()
+            df_copy['station'] = i
+            data_list.append(df_copy)
+            df = df.sort_index()
+            col_name.append(df.columns)
+            msno.matrix(df)
+            plt.savefig('station_matrix/' + i + '.png')
+            plt.close()
+
+    fig, ax = plt.subplots(figsize=(20, 5))
+    examp_particles = example[['NO_2','O_3', 'PM10']]
+
+    examp_particles /= examp_particles.max(axis=0)
+
+    examp_particles.interpolate(method='time').rolling(window=24*15).mean().plot(ax=ax)
+    plt.savefig('example.png')
+    plt.show()
+    plt.close()
+
+plot_example('28079018')
 
 chose_station =data[data['station'] ==28079018]
 df = chose_station[['date','NO_2']]
@@ -87,7 +87,7 @@ df = chose_station[['date','NO_2']]
 '''which means, first 24 hours for input data, next 24 hours for output label'''
 
 num_steps = 24
-batch_size = 128
+batch_size = 32
 n_feature = 1
 drop_out = 0.2
 
@@ -149,11 +149,11 @@ def generate_model(layer, neuron,batch_size, num_steps, feature, in_activation, 
     # model.add(Dropout(0.2))
     # model.add(Dense(neuron[1],  activation=out_activation))
 
+    # model.add(Dense(neurons[1]))
+    # model.add(Dropout(0.2))
     model.add(Dense(neurons[1]))
-    model.add(Dropout(0.2))
-    model.add(Dense(neurons[2]))
-    model.add(Dropout(0.2))
-    model.add(Dense(neuron[3], activation=out_activation))
+    # model.add(Dropout(0.2))
+    model.add(Dense(neuron[2], activation=out_activation))
 
     model.compile(loss=loss, optimizer=optimizer)
     return model
@@ -167,7 +167,7 @@ callback_early_stopping =EarlyStopping(monitor = 'val_loss', patience = 5, verbo
 callback_reduce_lr = ReduceLROnPlateau(monitor= 'val_loss', factor = 0.1, min_lr = 1e-6, patience= 0, verbose=1)
 callback_modelcheck = ModelCheckpoint('best_model.h5',monitor= 'val_loss',save_best_only=True, save_weights_only=False)
 epochs = 50
-neurons = (256,64,32,1)
+neurons = (256,64,1)
 input_activation ='tanh'
 output_activation = 'sigmoid'
 loss = 'mean_squared_error'
@@ -184,6 +184,34 @@ history_simple_rnn = simple_rnn.fit(train_X, train_y, epochs=epochs, batch_size=
 
 rnn_time = time.process_time() - rnn_time
 
+'''this plot code originally from this kernel: https://www.kaggle.com/diegovicente/particle-levels-prediction-using-lstm '''
+fig, ax = plt.subplots(figsize=(20, 5))
+
+start = test_X.shape[0] - 42
+interval = test_X[start+3:start+33:2, :, 0].reshape(-1, 1)
+
+truth, = plt.plot(np.arange(24*15), interval, alpha=0.6)
+
+old_preds = list()
+preds = simple_rnn.predict(test_X,batch_size= batch_size)
+for point in range(1, 15, 2):
+    prediction = np.squeeze(preds[start + point*2])
+    pred, = plt.plot(point * num_steps + np.arange(num_steps) - 12, prediction,
+                     linestyle='--', color='red')
+    old_preds.append(prediction)
+
+plt.legend(
+    [truth, pred],
+    ['Observation', 'Prediction']
+)
+ax.set_ylim([-.1, 1.1])
+ax.set_xticks(12 + np.arange(15) * num_steps)
+_ = ax.set_xticklabels([])
+plt.savefig('RNN_prediction.png')
+plt.close()
+
+
+
 '''GRU'''
 # gru_time = time.time()
 gru_time = time.process_time()
@@ -194,6 +222,36 @@ history_gru = gru.fit(train_X, train_y, epochs=epochs, batch_size=batch_size,val
               verbose=2, callbacks=[callback_early_stopping, callback_reduce_lr,callback_modelcheck])
 gru_time = time.process_time() - gru_time
 
+'''this plot code originally from this kernel: https://www.kaggle.com/diegovicente/particle-levels-prediction-using-lstm '''
+fig, ax = plt.subplots(figsize=(20, 5))
+
+start = test_X.shape[0] - 42
+interval = test_X[start+3:start+33:2, :, 0].reshape(-1, 1)
+
+truth, = plt.plot(np.arange(24*15), interval, alpha=0.6)
+
+old_preds = list()
+preds = gru.predict(test_X,batch_size= batch_size)
+for point in range(1, 15, 2):
+    prediction = np.squeeze(preds[start + point*2])
+    pred, = plt.plot(point * num_steps + np.arange(num_steps) - 12, prediction,
+                     linestyle='--', color='red')
+    old_preds.append(prediction)
+
+plt.legend(
+    [truth, pred],
+    ['Observation', 'Prediction']
+)
+ax.set_ylim([-.1, 1.1])
+ax.set_xticks(12 + np.arange(15) * num_steps)
+_ = ax.set_xticklabels([])
+plt.savefig('GRU_prediction.png')
+plt.close()
+
+
+
+
+
 '''LTSM'''
 lstm_time = time.process_time()
 lstm = generate_model(LSTM,neurons,batch_size, num_steps,n_feature,input_activation,output_activation, optimizer,loss)
@@ -202,6 +260,33 @@ history_lstm = lstm.fit(train_X, train_y, epochs=epochs, batch_size=batch_size,v
                 verbose=2, callbacks=[callback_early_stopping, callback_reduce_lr,callback_modelcheck])
 
 lstm_time = time.process_time() - lstm_time
+
+'''this plot code originally from this kernel: https://www.kaggle.com/diegovicente/particle-levels-prediction-using-lstm '''
+fig, ax = plt.subplots(figsize=(20, 5))
+
+start = test_X.shape[0] - 42
+interval = test_X[start+3:start+33:2, :, 0].reshape(-1, 1)
+
+truth, = plt.plot(np.arange(24*15), interval, alpha=0.6)
+
+old_preds = list()
+preds = lstm.predict(test_X,batch_size= batch_size)
+for point in range(1, 15, 2):
+    prediction = np.squeeze(preds[start + point*2])
+    pred, = plt.plot(point * num_steps + np.arange(num_steps) - 12, prediction,
+                     linestyle='--', color='red')
+    old_preds.append(prediction)
+
+plt.legend(
+    [truth, pred],
+    ['Observation', 'Prediction']
+)
+ax.set_ylim([-.1, 1.1])
+ax.set_xticks(12 + np.arange(15) * num_steps)
+_ = ax.set_xticklabels([])
+plt.savefig('LSTm_prediction.png')
+plt.close()
+
 
 
 '''evaluate the model'''
@@ -234,3 +319,5 @@ print('GRU time: %.2f '% (gru_time/60))
 
 evaluation(lstm, history_lstm, LSTM)
 print('LSTM time: %.2f' % (lstm_time/60))
+
+
