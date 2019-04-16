@@ -75,7 +75,7 @@ data = data.sort_values(by =['date'])
 # plot_example('28079018')
 
 chose_station =data[data['station'] ==28079018]
-df = chose_station[['date','O_3']]
+df = chose_station[['date','NO_2']]
 # print(df)
 # print('==================')
 # print()
@@ -91,7 +91,7 @@ batch_size = 128
 n_feature = 1
 drop_out = 0.2
 
-values = np.array(df.O_3)
+values = np.array(df.NO_2)
 ts = pd.Series(values, index=df.date)
 
 def pivot_with_num_steps(series, num_steps):
